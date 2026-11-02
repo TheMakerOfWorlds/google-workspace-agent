@@ -1,5 +1,9 @@
 # Validation
 
+## Background-session Keychain access — November 2, 2026
+
+T3 and other SSH-launched agents run in their own macOS security session, where the login keychain stays locked even while the desktop session has it unlocked. A locked read or write (`security` exit 36) is now repeated once through a one-shot `gui/UID` launchd job and a private owner-only socket, limited to this plugin's own find/add records. It never unlocks or bypasses the Keychain; with no logged-in desktop session it reports that clearly. All 175 tests passed, and the read-only doctor verified all four Gmail accounts from a locked T3 session without reading mail.
+
 ## Beginner setup guidance — September 17, 2026
 
 Added a plain-language walkthrough, resumable agent setup mode, and a setup discovery trigger. Checked local guide links and plugin/skill schema validation. The setup reference is loaded only for onboarding; routine service commands retain separate references. Runtime behavior is unchanged.

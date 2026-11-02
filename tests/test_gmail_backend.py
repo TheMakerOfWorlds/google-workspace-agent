@@ -144,6 +144,39 @@ class AuthTests(unittest.TestCase):
             self.assertIn("add-generic-password", run.call_args_list[0].kwargs["input"])
             self.assertTrue(run.call_args_list[0].kwargs["capture_output"])
 
+    def test_keychain_locked_session_uses_desktop_session(self):
+        import keychain_session
+        value = {"refresh_token": "PRIVATE_SECRET"}
+        encoded = base64.b64encode(json.dumps(value).encode()).decode()
+        locked = subprocess.CompletedProcess([], 36, "", "User interaction is not allowed.")
+        with patch.object(gb.sys, "platform", "darwin"), patch.object(gb.subprocess, "run", return_value=locked), \
+                patch.object(keychain_session, "run_in_desktop", return_value=(0, encoded, "")) as desktop:
+            self.assertEqual(gb.Keychain().get("token.work"), value)
+            desktop.assert_called_once_with(["find-generic-password", "-s", gb.Keychain.service, "-a", "token.work", "-w"], None)
+        missing = subprocess.CompletedProcess([], 44, "", "")
+        with patch.object(gb.sys, "platform", "darwin"), patch.object(gb.subprocess, "run", return_value=missing), \
+                patch.object(keychain_session, "run_in_desktop") as desktop:
+            self.assertIsNone(gb.Keychain().get("token.work"))
+            desktop.assert_not_called()
+        with patch.object(gb.sys, "platform", "darwin"), patch.object(gb.subprocess, "run", return_value=locked), \
+                patch.object(keychain_session, "run_in_desktop", side_effect=keychain_session.SessionUnavailable("x")):
+            with self.assertRaisesRegex(MailError, "desktop session"):
+                gb.Keychain().get("token.work")
+
+    def test_desktop_keychain_helper_only_allows_plugin_records(self):
+        import keychain_session as ks
+        self.assertEqual(ks.SERVICE, gb.Keychain.service)
+        self.assertTrue(ks.allowed(["find-generic-password", "-s", ks.SERVICE, "-a", "token.abc", "-w"], None))
+        self.assertTrue(ks.allowed(["-i"], f"add-generic-password -U -s {ks.SERVICE} -a token.abc -w QUJD=\n"))
+        for args, data in ((["find-generic-password", "-s", "other.service", "-a", "x", "-w"], None),
+                           (["find-generic-password", "-s", ks.SERVICE, "-a", "x;rm", "-w"], None),
+                           (["dump-keychain"], None), (["unlock-keychain", "-p", "pw"], None),
+                           (["-i"], f"add-generic-password -U -s {ks.SERVICE} -a x -w A\ndump-keychain\n"),
+                           (["-i"], "delete-generic-password -s " + ks.SERVICE + "\n")):
+            self.assertFalse(ks.allowed(args, data))
+        with self.assertRaises(ks.SessionUnavailable):
+            ks.run_in_desktop(["dump-keychain"])
+
 
 class GmailTests(unittest.TestCase):
     def setUp(self):

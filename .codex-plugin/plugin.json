@@ -1,6 +1,6 @@
 {
   "name": "email-agent",
-  "version": "0.1.0+codex.20260917163128",
+  "version": "0.1.0+codex.20261102113625",
   "description": "Account-first Gmail, Calendar, Meet, Drive, Docs, Sheets, and Contacts.",
   "author": {
     "name": "Jackson Stone",

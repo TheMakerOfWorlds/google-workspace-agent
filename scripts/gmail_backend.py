@@ -118,15 +118,25 @@ def http_json(url, *, token=None, payload=None, form=False, retry=False, method=
 
 class Keychain:
     """Only our named records. Secret values use stdin, never process arguments."""
-    service = "com.themakerofworlds.email-agent"
+    service = "com.themakerofworlds.email-agent"  # keychain_session.SERVICE must match
 
     def _run(self, args, data=None):
         if sys.platform != "darwin":
             raise MailError("Secure credential storage currently requires macOS Keychain.")
         try:
-            return subprocess.run(["/usr/bin/security", *args], input=data, capture_output=True, text=True, timeout=60)
+            result = subprocess.run(["/usr/bin/security", *args], input=data, capture_output=True, text=True, timeout=60)
         except (OSError, subprocess.TimeoutExpired):
             raise MailError("macOS Keychain is unavailable or waiting for unlock.") from None
+        if result.returncode != 36:
+            return result
+        # SSH/background sessions keep their own locked keychain view; use the logged-in desktop session.
+        import keychain_session
+        try:
+            code, out, err = keychain_session.run_in_desktop(args, data)
+        except keychain_session.SessionUnavailable:
+            raise MailError("Keychain is locked here and no logged-in Mac desktop session could open it. "
+                            "Log in on the Mac's screen and unlock the login keychain.") from None
+        return subprocess.CompletedProcess(result.args, code, out, err)
 
     @staticmethod
     def _key(key):
